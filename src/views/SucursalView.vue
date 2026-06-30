@@ -5,8 +5,8 @@
   <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
 
     <!-- Header -->
-    <div class="bg-[#1a1a2e] px-8 py-6">
-      <h1 class="text-2xl font-bold text-white">Mi Ubicación</h1>
+    <div class="bg-white px-8 py-6">
+      <h1 class="text-2xl font-bold text-black">Mi Ubicación</h1>
       <p class="text-sm text-slate-400 mt-1">Mostrando tu posición actual en el mapa</p>
     </div>
 
