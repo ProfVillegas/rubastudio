@@ -1,3 +1,10 @@
+// src/services/ubicacion.service.js
+//
+// Capa de datos CRUD para el módulo de ubicación.
+// Geocodificación inversa con Google Maps Geocoding API.
+// Reemplaza los mocks con tu API real: fetch('/api/ubicaciones')
+
+// ── Simulación de base de datos en memoria ────────────────────────
 let _db = [
   {
     id: 1,
@@ -58,42 +65,53 @@ export async function eliminarUbicacion(id) {
   _db.splice(idx, 1)
 }
 
-// ── GEOCODIFICACIÓN INVERSA (Google Maps Geocoding API) ───────────
-// Requiere que la API Key tenga habilitada "Geocoding API"
-// en console.cloud.google.com
-export async function geocodificarInverso(lat, lng) {
-  const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=es&key=${API_KEY}`
+// ── GEOCODIFICACIÓN INVERSA (Usando el SDK oficial) ───────────
+export function geocodificarInverso(lat, lng) {
+  return new Promise((resolve, reject) => {
+    // Verificar que el SDK de Google esté cargado en el objeto window
+    if (!window.google || !window.google.maps) {
+      return reject(new Error('El SDK de Google Maps no está cargado.'));
+    }
 
-  const res  = await fetch(url)
-  const data = await res.json()
+    const geocoder = new google.maps.Geocoder();
+    const latlng = { lat: parseFloat(lat), lng: parseFloat(lng) };
 
-  if (data.status !== 'OK') {
-    throw new Error(`Geocodificación fallida: ${data.status}`)
-  }
+    geocoder.geocode({ location: latlng, language: 'es' }, (results, status) => {
+      
+      if (status === 'OK') {
+        if (results[0]) {
+          const componentes = results[0].address_components;
 
-  // Extraer componentes del primer resultado
-  const componentes = data.results[0]?.address_components ?? []
+          const get = (...tipos) => {
+            const c = componentes.find(c => tipos.every(t => c.types.includes(t)));
+            return c?.long_name ?? '';
+          };
 
-  const get = (...tipos) => {
-    const c = componentes.find(c => tipos.every(t => c.types.includes(t)))
-    return c?.long_name ?? ''
-  }
-  const getShort = (...tipos) => {
-    const c = componentes.find(c => tipos.every(t => c.types.includes(t)))
-    return c?.short_name ?? ''
-  }
+          const resultado = {
+            calle:   get('route'),
+            numero:  get('street_number'),
+            colonia: get('sublocality_level_1') || get('sublocality') || get('neighborhood'),
+            ciudad:  get('locality') || get('administrative_area_level_2'),
+            estado:  get('administrative_area_level_1'),
+            cp:      get('postal_code'),
+          };
 
-  return {
-    calle:   get('route'),
-    numero:  get('street_number'),
-    colonia: get('sublocality_level_1') || get('neighborhood'),
-    ciudad:  get('locality') || get('administrative_area_level_2'),
-    estado:  get('administrative_area_level_1'),
-    cp:      get('postal_code'),
-  }
+          if (import.meta.env.DEV) {
+            console.debug('[geocodificarInverso] resultado:', resultado);
+          }
+
+          resolve(resultado);
+        } else {
+          reject(new Error('No se encontraron resultados.'));
+        }
+      } else if (status === 'ZERO_RESULTS') {
+        reject(new Error('No se encontró dirección para estas coordenadas.'));
+      } else {
+        reject(new Error(`Geocodificación fallida debido a: ${status}`));
+      }
+    });
+  });
 }
-
 // ── GEOLOCALIZACIÓN DEL NAVEGADOR ─────────────────────────────────
 export function obtenerCoordenadas() {
   return new Promise((resolve, reject) => {

@@ -1,3 +1,7 @@
+// src/stores/ubicacion.store.js
+//
+// Store de Pinia: estado global CRUD de ubicaciones.
+// Compatible tanto con la versión OSM como con Google Maps.
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
@@ -146,15 +150,21 @@ export const useUbicacionStore = defineStore('ubicacion', () => {
 
   async function autocompletarDesdeCoordenadas(lat, lng) {
     geocodificando.value = true
+    error.value = null
     try {
       const direccion = await geocodificarInverso(lat, lng)
+
+      // Sobreescribe SIEMPRE los campos de dirección cuando el usuario
+      // mueve el marcador — solo omite si el valor obtenido está vacío.
       Object.entries(direccion).forEach(([k, v]) => {
-        if (!form.value[k]) form.value[k] = v
+        if (v) form.value[k] = v
       })
+
       form.value.latitud  = lat
       form.value.longitud = lng
     } catch (e) {
       error.value = e.message
+      console.error('[ubicacion.store] geocodificación inversa:', e.message)
     } finally {
       geocodificando.value = false
     }
