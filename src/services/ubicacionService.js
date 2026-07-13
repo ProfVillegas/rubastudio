@@ -1,74 +1,99 @@
-// src/services/ubicacion.service.js
+// src/services/ubicacionService.js
 //
-// Capa de datos CRUD para el módulo de ubicación.
+// Capa de datos (API / Tercera Capa) para el módulo de ubicación conectada a Cloud Firestore.
 // Geocodificación inversa con Google Maps Geocoding API.
-// Reemplaza los mocks con tu API real: fetch('/api/ubicaciones')
 
-// ── Simulación de base de datos en memoria ────────────────────────
-let _db = [
-  {
-    id: 1,
-    nombre:     'Sede Central',
-    calle:      'Av. Insurgentes Sur',
-    numero:     '1234',
-    colonia:    'Del Valle',
-    ciudad:     'Ciudad de México',
-    estado:     'CDMX',
-    cp:         '03100',
-    telefono:   '55 5678 9012',
-    celular:    '55 1234 5678',
-    correo:     'contacto@rubastudio.mx',
-    latitud:    19.3730,
-    longitud:   -99.1728,
-    referencia: 'Frente al parque',
-  },
-]
-let _nextId = 2
-const delay = (ms = 420) => new Promise(r => setTimeout(r, ms))
+import { db } from '@/config/firebase'
+import { 
+  collection, 
+  getDocs, 
+  doc, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc 
+} from 'firebase/firestore'
+
+// Referencia a la colección destino en Cloud Firestore
+const collectionRef = collection(db, 'ubicaciones')
 
 // ── GET ALL ───────────────────────────────────────────────────────
 export async function getUbicaciones() {
-  await delay()
-  return structuredClone(_db)
+  try {
+    const querySnapshot = await getDocs(collectionRef)
+    const ubicaciones = []
+    
+    querySnapshot.forEach((docSnap) => {
+      // Inyectamos el hash alfanumérico generado por Firebase como la propiedad 'id'
+      ubicaciones.push({ id: docSnap.id, ...docSnap.data() })
+    })
+    
+    return ubicaciones
+  } catch (error) {
+    console.error('[ubicacionService] Error en getUbicaciones:', error)
+    throw new Error('No se pudieron recuperar las ubicaciones del servidor remoto.')
+  }
 }
 
 // ── GET ONE ───────────────────────────────────────────────────────
 export async function getUbicacion(id) {
-  await delay()
-  const item = _db.find(u => u.id === id)
-  if (!item) throw new Error(`Ubicación ${id} no encontrada`)
-  return structuredClone(item)
+  try {
+    const docRef = doc(db, 'ubicaciones', id)
+    const docSnap = await getDoc(docRef)
+    
+    if (!docSnap.exists()) {
+      throw new Error(`La ubicación con ID ${id} no existe.`)
+    }
+    
+    return { id: docSnap.id, ...docSnap.data() }
+  } catch (error) {
+    console.error(`[ubicacionService] Error en getUbicacion para el ID ${id}:`, error)
+    throw new Error(error.message || 'Error al consultar la información detallada de la ubicación.')
+  }
 }
 
 // ── CREATE ────────────────────────────────────────────────────────
 export async function crearUbicacion(datos) {
-  await delay()
-  const nueva = { id: _nextId++, ...datos }
-  _db.push(nueva)
-  return structuredClone(nueva)
+  try {
+    // addDoc se encarga de estructurar el registro y generar el hash ID en el servidor
+    const docRef = await addDoc(collectionRef, datos)
+    return { id: docRef.id, ...datos }
+  } catch (error) {
+    console.error('[ubicacionService] Error en crearUbicacion:', error)
+    throw new Error('No se pudo dar de alta la ubicación en la base de datos.')
+  }
 }
 
 // ── UPDATE ────────────────────────────────────────────────────────
 export async function actualizarUbicacion(id, datos) {
-  await delay()
-  const idx = _db.findIndex(u => u.id === id)
-  if (idx === -1) throw new Error(`Ubicación ${id} no encontrada`)
-  _db[idx] = { ..._db[idx], ...datos }
-  return structuredClone(_db[idx])
+  try {
+    const docRef = doc(db, 'ubicaciones', id)
+    
+    // Desestructuramos para limpiar y asegurar que el campo destructivo 'id' no se guarde dentro del payload del documento
+    const { id: _, ...datosAActualizar } = datos
+    
+    await updateDoc(docRef, datosAActualizar)
+    return { id, ...datosAActualizar }
+  } catch (error) {
+    console.error(`[ubicacionService] Error en actualizarUbicacion para el ID ${id}:`, error)
+    throw new Error('Ocurrió un error al procesar la actualización de los datos.')
+  }
 }
 
 // ── DELETE ────────────────────────────────────────────────────────
 export async function eliminarUbicacion(id) {
-  await delay()
-  const idx = _db.findIndex(u => u.id === id)
-  if (idx === -1) throw new Error(`Ubicación ${id} no encontrada`)
-  _db.splice(idx, 1)
+  try {
+    const docRef = doc(db, 'ubicaciones', id)
+    await deleteDoc(docRef)
+  } catch (error) {
+    console.error(`[ubicacionService] Error en eliminarUbicacion para el ID ${id}:`, error)
+    throw new Error('Error crítico: No se pudo remover la ubicación especificada.')
+  }
 }
 
 // ── GEOCODIFICACIÓN INVERSA (Usando el SDK oficial) ───────────
 export function geocodificarInverso(lat, lng) {
   return new Promise((resolve, reject) => {
-    // Verificar que el SDK de Google esté cargado en el objeto window
     if (!window.google || !window.google.maps) {
       return reject(new Error('El SDK de Google Maps no está cargado.'));
     }
@@ -77,7 +102,6 @@ export function geocodificarInverso(lat, lng) {
     const latlng = { lat: parseFloat(lat), lng: parseFloat(lng) };
 
     geocoder.geocode({ location: latlng, language: 'es' }, (results, status) => {
-      
       if (status === 'OK') {
         if (results[0]) {
           const componentes = results[0].address_components;
@@ -112,6 +136,7 @@ export function geocodificarInverso(lat, lng) {
     });
   });
 }
+
 // ── GEOLOCALIZACIÓN DEL NAVEGADOR ─────────────────────────────────
 export function obtenerCoordenadas() {
   return new Promise((resolve, reject) => {
